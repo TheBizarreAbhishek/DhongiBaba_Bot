@@ -45,6 +45,12 @@ if ! docker compose version &> /dev/null; then
      sudo apt-get install -y docker-compose-plugin
 fi
 
+# Check for .env
+if [ ! -f ".env" ]; then
+    echo -e "${YELLOW}.env not found! Creating from example...${NC}"
+    cp .env.example .env
+fi
+
 # Check if config.py exists
 if [ ! -f "CONFIG/config.py" ]; then
     echo -e "${YELLOW}CONFIG/config.py not found! Creating from template...${NC}"
