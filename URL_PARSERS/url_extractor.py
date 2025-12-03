@@ -37,14 +37,51 @@ from HELPERS.logger import logger
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram import enums
 from HELPERS.safe_messeger import fake_message
+from HELPERS.user_state import set_user_mode, get_user_mode, is_chat_mode, is_downloader_mode, MODE_CHAT, MODE_DOWNLOADER
+
 
 # Get app instance for decorators
 app = get_app()
+
+@app.on_callback_query(filters.regex(r"^set_mode\|"))
+def set_mode_callback(app, callback_query):
+    user_id = callback_query.from_user.id
+    data = callback_query.data.split("|")[1]
+    
+    from HELPERS.user_state import set_user_mode, MODE_CHAT, MODE_DOWNLOADER
+    from HELPERS.decorators import get_main_reply_keyboard
+    
+    if data == "chat":
+        set_user_mode(user_id, MODE_CHAT)
+        callback_query.message.edit_text(
+            "💬 **Chat Mode Activated**\n\n"
+            "You can now send messages directly to the owner.\n"
+            "Any message you send here will be forwarded.\n\n"
+            "To switch back, type /start"
+        )
+    elif data == "downloader":
+        set_user_mode(user_id, MODE_DOWNLOADER)
+        callback_query.message.edit_text(
+            "⬇️ **Downloader Mode Activated**\n\n"
+            "Send me any link to download!\n"
+            "Type /help for more info.\n\n"
+            "To switch back, type /start"
+        )
+        # Send the main keyboard for downloader mode
+        try:
+            app.send_message(
+                user_id, 
+                "⌨️ Keyboard enabled", 
+                reply_markup=get_main_reply_keyboard(user_id)
+            )
+        except:
+            pass
 
 @app.on_message(filters.text & filters.private)
 @reply_with_keyboard
 @background_handler(label="url_distractor")
 def url_distractor(app, message):
+
     user_id = message.chat.id
     is_admin = int(user_id) in Config.ADMIN
     logger.info(f"🔍 [DEBUG] url_distractor: message.text в начале функции='{message.text}'")
@@ -56,11 +93,34 @@ def url_distractor(app, message):
     from CONFIG.messages import safe_get_messages
     from HELPERS.safe_messeger import safe_send_message
     
+    # Dual Mode Interception
+    if is_chat_mode(user_id):
+        # Forward message to admin
+        if not is_admin:
+            # Forward to all admins
+            for admin_id in Config.ADMIN:
+                try:
+                    # Forward the message
+                    message.forward(admin_id)
+                    # Send context info (who sent it)
+                    user_info = f"📩 **New Message from User**\n"
+                    user_info += f"Name: {message.from_user.first_name} {message.from_user.last_name or ''}\n"
+                    user_info += f"ID: `{message.from_user.id}`\n"
+                    user_info += f"Username: @{message.from_user.username}" if message.from_user.username else ""
+                    app.send_message(admin_id, user_info)
+                except Exception as e:
+                    logger.error(f"Failed to forward message to admin {admin_id}: {e}")
+            
+            # Confirm to user
+            safe_send_message(user_id, "✅ Message sent to owner. They will reply soon.", message=message)
+            return
+
     # Check if this is a command (starts with / or is an emoji command)
     is_command = text.startswith('/') or text in [
         "🧹", "🍪", "⚙️", "🔍", "🌐", "🔗", "📼", "📊", "✂️", "🎧", "💬", 
         "#️⃣", "🆘", "📃", "⏯️", "🎹", "🌎", "✅", "🖼", "🧰", "🔞", "🧾"
     ]
+
     
     if is_command:
         allowed, cmd_limit_msg = check_command_limit(user_id, is_admin)
@@ -134,29 +194,30 @@ def url_distractor(app, message):
         pass
 
     # Emoji keyboard mapping to commands (from FULL layout)
+    # Simplified for personal use
     emoji_to_command = {
         "🧹": Config.CLEAN_COMMAND,
-        "🍪": Config.DOWNLOAD_COOKIE_COMMAND,
-        "⚙️": Config.SETTINGS_COMMAND,
-        "🔍": Config.SEARCH_COMMAND,
-        "🌐": Config.COOKIES_FROM_BROWSER_COMMAND,
+        # "🍪": Config.DOWNLOAD_COOKIE_COMMAND, # Hidden
+        # "⚙️": Config.SETTINGS_COMMAND, # Hidden
+        # "🔍": Config.SEARCH_COMMAND, # Hidden
+        # "🌐": Config.COOKIES_FROM_BROWSER_COMMAND, # Hidden
         "🔗": Config.LINK_COMMAND,
         "📼": Config.FORMAT_COMMAND,
         "📊": Config.MEDIINFO_COMMAND,
         "✂️": Config.SPLIT_COMMAND,
         "🎧": Config.AUDIO_COMMAND,
-        "💬": Config.SUBS_COMMAND,
-        "#️⃣": Config.TAGS_COMMAND,
+        # "💬": Config.SUBS_COMMAND, # Hidden
+        # "#️⃣": Config.TAGS_COMMAND, # Hidden
         "🆘": "/help",
-        "📃": Config.USAGE_COMMAND,
-        "⏯️": Config.PLAYLIST_COMMAND,
-        "🎹": Config.KEYBOARD_COMMAND,
-        "🌎": Config.PROXY_COMMAND,
-        "✅": Config.CHECK_COOKIE_COMMAND,
+        # "📃": Config.USAGE_COMMAND, # Hidden
+        # "⏯️": Config.PLAYLIST_COMMAND, # Hidden
+        # "🎹": Config.KEYBOARD_COMMAND, # Hidden
+        # "🌎": Config.PROXY_COMMAND, # Hidden
+        # "✅": Config.CHECK_COOKIE_COMMAND, # Hidden
         "🖼": Config.IMG_COMMAND,
-        "🧰": Config.ARGS_COMMAND,
+        # "🧰": Config.ARGS_COMMAND, # Hidden
         "🔞": Config.NSFW_COMMAND,
-        "🧾": Config.LIST_COMMAND,
+        # "🧾": Config.LIST_COMMAND, # Hidden
     }
 
     if text in emoji_to_command:
@@ -314,10 +375,6 @@ def url_distractor(app, message):
             from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
             from CONFIG.messages import safe_get_messages
             keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(safe_get_messages(user_id).SETTINGS_DEV_GITHUB_BUTTON_MSG, url="https://github.com/upekshaip/tg-ytdlp-bot"),
-                    InlineKeyboardButton(safe_get_messages(user_id).SETTINGS_CONTR_GITHUB_BUTTON_MSG, url="https://github.com/chelaxian/tg-ytdlp-bot")
-                ],
                 [InlineKeyboardButton(safe_get_messages(user_id).URL_EXTRACTOR_HELP_CLOSE_BUTTON_MSG, callback_data="help_msg|close")]
             ])
             try:
@@ -371,20 +428,28 @@ def url_distractor(app, message):
     # ----- Basic Commands -----
     # /Start Command
     if text == "/start":
-        if is_admin:
-            send_to_user(message, safe_get_messages(user_id).WELCOME_MASTER)
-        else:
-            # For non-admins, check subscription first
-            if not is_user_in_channel(app, message):
-                return  # is_user_in_channel already sends subscription message
-            # User is subscribed, send welcome message
-            from HELPERS.safe_messeger import safe_send_message
-            safe_send_message(
-                message.chat.id,
-                safe_get_messages(user_id).URL_EXTRACTOR_WELCOME_MSG.format(first_name=message.chat.first_name, credits=safe_get_messages(user_id).CREDITS_MSG),
-                parse_mode=enums.ParseMode.HTML,
-                message=message)
-            send_to_logger(message, LoggerMsg.USER_STARTED_BOT.format(chat_id=message.chat.id))
+        # Always show mode selection for everyone (including admins for testing)
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("💬 Chat with Owner", callback_data="set_mode|chat"),
+                InlineKeyboardButton("⬇️ Downloader Mode", callback_data="set_mode|downloader")
+            ]
+        ])
+        
+        welcome_text = (
+            f"👋 **Welcome to {Config.BOT_NAME_FOR_USERS}!**\n\n"
+            "Please select a mode to continue:"
+        )
+        
+        from HELPERS.safe_messeger import safe_send_message
+        safe_send_message(
+            message.chat.id,
+            welcome_text,
+            parse_mode=enums.ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+            message=message
+        )
+        send_to_logger(message, LoggerMsg.USER_STARTED_BOT.format(chat_id=message.chat.id))
         return
 
     # /Help Command
@@ -394,10 +459,6 @@ def url_distractor(app, message):
             return  # is_user_in_channel already sends subscription message
         # User is subscribed or admin, send help message
         keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(safe_get_messages(user_id).SETTINGS_DEV_GITHUB_BUTTON_MSG, url="https://github.com/upekshaip/tg-ytdlp-bot"),
-                InlineKeyboardButton(safe_get_messages(user_id).SETTINGS_CONTR_GITHUB_BUTTON_MSG, url="https://github.com/chelaxian/tg-ytdlp-bot")
-            ],
             [InlineKeyboardButton(safe_get_messages(user_id).URL_EXTRACTOR_HELP_CLOSE_BUTTON_MSG, callback_data="help_msg|close")]
         ])
         from HELPERS.safe_messeger import safe_send_message

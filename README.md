@@ -1,4 +1,4 @@
-# 🤖 tg-ytdlp-bot
+# 🤖 Dhongi Baba Bot (Universal Downloader)
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![PyroTGFork](https://img.shields.io/badge/PyroTGFork-Latest-green.svg)](https://github.com/pyrogram/pyrogram)
