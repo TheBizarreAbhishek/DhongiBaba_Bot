@@ -20,6 +20,24 @@ else
     echo -e "${GREEN}Docker is already installed.${NC}"
 fi
 
+# Check for Git
+if ! command -v git &> /dev/null; then
+    echo -e "${YELLOW}Git not found. Installing Git...${NC}"
+    sudo apt-get update
+    sudo apt-get install -y git
+fi
+
+# Clone Repository if not exists
+if [ ! -d "DhongiBaba_Bot" ]; then
+    echo -e "${GREEN}Cloning Dhongi Baba Bot repository...${NC}"
+    git clone https://github.com/TheBizarreAbhishek/DhongiBaba_Bot.git
+    cd DhongiBaba_Bot
+else
+    cd DhongiBaba_Bot
+    echo -e "${GREEN}Pulling latest changes...${NC}"
+    git pull
+fi
+
 # Check for Docker Compose
 if ! docker compose version &> /dev/null; then
      echo -e "${YELLOW}Docker Compose plugin not found. Installing...${NC}"
